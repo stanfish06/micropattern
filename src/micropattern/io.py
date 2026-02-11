@@ -23,6 +23,7 @@ MINN_FILE_LIST = [
     "GSM5176723_gastruloid_24h_2.barcodes.tsv.gz",
     "GSM5176723_gastruloid_24h_2.genes.tsv.gz",
     "GSM5176723_gastruloid_24h_2.matrix.tsv.gz",
+    "GSE169074_gastruloid.all.time.metadata.csv.gz",
 ]
 
 
