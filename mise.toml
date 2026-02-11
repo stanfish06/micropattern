@@ -1,0 +1,23 @@
+[tools]
+uv = "latest"
+
+[settings]
+python.uv_venv_auto = true
+
+[tasks.sync]
+run = [
+    "uv sync",
+]
+
+[tasks.format]
+run = [
+    "pyproject-fmt pyproject.toml || true",
+    "uv run ruff format",
+    "uv run ruff check --fix"
+]
+
+[tasks.lint]
+run = "pyright src || uv run ruff check || uv run ty check"
+
+[tasks.kernel]
+run = "uv run ipython kernel install --name 'micropattern' --user"

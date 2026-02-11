@@ -1,0 +1,25 @@
+[build-system]
+build-backend = "uv_build"
+requires = [ "uv-build>=0.9.21,<0.10" ]
+
+[project]
+name = "micropattern"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+  { name = "Stan", email = "zyyu@umich.edu" },
+]
+requires-python = ">=3.12"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "jupyterlab>=4.5.4",
+  "s3fs>=2026.2",
+  "scanpy>=1.12",
+  "scvi-tools>=1.4.1",
+]
