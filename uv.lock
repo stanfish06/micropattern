@@ -1613,14 +1613,16 @@ dependencies = [
     { name = "jupyterlab" },
     { name = "s3fs" },
     { name = "scanpy" },
+    { name = "scprep" },
     { name = "scvi-tools" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "jupyterlab", specifier = ">=4.5.4" },
-    { name = "s3fs", specifier = ">=2026.2.0" },
+    { name = "s3fs", specifier = ">=2026.2" },
     { name = "scanpy", specifier = ">=1.12" },
+    { name = "scprep", specifier = ">=1.1.0" },
     { name = "scvi-tools", specifier = ">=1.4.1" },
 ]
 
@@ -3021,6 +3023,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ac/70/64b4d7ca92f9cf2e6fc6aaa2eecf80bb9b6b985043a9583f32f8177ea122/scipy-1.16.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:ffa6eea95283b2b8079b821dc11f50a17d0571c92b43e2b5b12764dc5f9b285d", size = 38802779, upload-time = "2025-10-28T17:37:59.393Z" },
     { url = "https://files.pythonhosted.org/packages/61/82/8d0e39f62764cce5ffd5284131e109f07cf8955aef9ab8ed4e3aa5e30539/scipy-1.16.3-cp314-cp314t-win_amd64.whl", hash = "sha256:d9f48cafc7ce94cf9b15c6bffdc443a81a27bf7075cf2dcd5c8b40f85d10c4e7", size = 39471128, upload-time = "2025-10-28T17:38:05.259Z" },
     { url = "https://files.pythonhosted.org/packages/64/47/a494741db7280eae6dc033510c319e34d42dd41b7ac0c7ead39354d1a2b5/scipy-1.16.3-cp314-cp314t-win_arm64.whl", hash = "sha256:21d9d6b197227a12dcbf9633320a4e34c6b0e51c57268df255a0942983bac562", size = 26464127, upload-time = "2025-10-28T17:38:11.34Z" },
+]
+
+[[package]]
+name = "scprep"
+version = "1.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "decorator" },
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/97/bced1293ae41248bb52370489a5142901cfbbc9f4fdc241e6c81b4425406/scprep-1.1.0.tar.gz", hash = "sha256:1276773585a77a673f6ac4948a14c3ad106c502c2ab946df050d1a0a1f3b9828", size = 103802, upload-time = "2021-03-19T20:48:02.422Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/91/dfb35608ffae7eb0f45b565e702d3083d784988200ab6a967fd3f60d833e/scprep-1.1.0-py3-none-any.whl", hash = "sha256:338af5565321d3b54a15a7635e5bc5160f84569bb889e1c369d4c3b3afecdc40", size = 104410, upload-time = "2021-03-19T20:48:01.329Z" },
 ]
 
 [[package]]
