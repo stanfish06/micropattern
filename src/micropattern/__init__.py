@@ -1,3 +1,4 @@
 from . import io
+from . import utils
 
-__all__ = ["io"]
+__all__ = ["io", "utils"]
