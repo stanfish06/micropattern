@@ -4,6 +4,7 @@ from fsspec.callbacks import TqdmCallback
 from anndata import AnnData
 import tempfile
 from typing import Literal
+import pandas as pd
 from datetime import datetime
 
 __all__ = ["fetch_minn", "upload_adata", "upload_minn_adata", "MINN_FILE_LIST"]
@@ -37,6 +38,10 @@ HEEMSKERK_ADATA = {
     "meta": "MP_old_48-96h_new_D6-10_meta.csv",
 }
 
+MISC_DATA = {
+    "cc_genes": "Macosko_cell_cycle_genes.txt",
+}
+
 
 def fetch_heemskerk(path: Path):
     s3 = s3fs.S3FileSystem()
@@ -47,6 +52,23 @@ def fetch_heemskerk(path: Path):
             lpath=str(path / "heemskerk_data" / dat),
             callback=TqdmCallback(),
         )
+
+
+def read_cc_list(path: Path) -> dict | None:
+    s3 = s3fs.S3FileSystem()
+    f = MISC_DATA["cc_genes"]
+    print(f"Downloading {f}")
+    s3.get(
+        rpath=f"stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d/{f}",
+        lpath=str(path / "heemskerk_data" / f),
+        callback=TqdmCallback(),
+    )
+    cc = pd.read_csv(path / "heemskerk_data" / f, sep="\t")
+    # there is a dummy 6th column, probably due to trailing tab
+    cc = cc.iloc[:, :5].to_dict(orient="list")
+    for cat, gl in cc.items():
+        cc[cat] = [g for g in gl if not pd.isna(g)]
+    return cc
 
 
 def fetch_minn(
