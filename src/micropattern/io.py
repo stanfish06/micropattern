@@ -3,6 +3,7 @@ from pathlib import Path
 from fsspec.callbacks import TqdmCallback
 from anndata import AnnData
 import tempfile
+from typing import Literal
 from datetime import datetime
 
 __all__ = ["fetch_minn", "upload_adata", "upload_minn_adata", "MINN_FILE_LIST"]
@@ -29,16 +30,33 @@ MINN_FILE_LIST = [
     "GSE169074_gastruloid.all.time.metadata.csv.gz",
 ]
 
+MINN_ADATA_LIST = {"qc": "minn_gastruloid_0-24h_qc_20260211.h5ad"}
 
-def fetch_minn(path: Path):
+
+def fetch_minn(
+    path: Path,
+    type: str = Literal["mtx", "adata"],
+    stage: str = "qc",
+):
     s3 = s3fs.S3FileSystem()
-    for f in MINN_FILE_LIST:
-        print(f"Downloading {f}")
-        s3.get(
-            rpath=f"stan-sequencing-data/processed-active/Minn-micropattern-0-24h/{f}",
-            lpath=str(path / "minn_data" / f),
-            callback=TqdmCallback(),
-        )
+    match type:
+        case "mtx":
+            for f in MINN_FILE_LIST:
+                print(f"Downloading {f}")
+                s3.get(
+                    rpath=f"stan-sequencing-data/processed-active/Minn-micropattern-0-24h/{f}",
+                    lpath=str(path / "minn_data" / f),
+                    callback=TqdmCallback(),
+                )
+        case "adata":
+            if stage in MINN_ADATA_LIST:
+                f = MINN_ADATA_LIST[stage]
+                print(f"Downloading {f}")
+                s3.get(
+                    rpath=f"stan-sequencing-data/processed-active/Minn-micropattern-0-24h/{f}",
+                    lpath=str(path / "minn_data" / f),
+                    callback=TqdmCallback(),
+                )
 
 
 def upload_adata(
