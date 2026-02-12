@@ -32,6 +32,22 @@ MINN_FILE_LIST = [
 
 MINN_ADATA_LIST = {"qc": "minn_gastruloid_0-24h_qc_20260211.h5ad"}
 
+HEEMSKERK_ADATA = {
+    "adata": "adata_timeseries_old_48-96h_new_D6-10_filtered_qc.h5ad",
+    "meta": "MP_old_48-96h_new_D6-10_meta.csv",
+}
+
+
+def fetch_heemskerk(path: Path):
+    s3 = s3fs.S3FileSystem()
+    for s, dat in HEEMSKERK_ADATA.items():
+        print(f"Downloading {dat} ({s})")
+        s3.get(
+            rpath=f"stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d/{dat}",
+            lpath=str(path / "heemskerk_data" / dat),
+            callback=TqdmCallback(),
+        )
+
 
 def fetch_minn(
     path: Path,
