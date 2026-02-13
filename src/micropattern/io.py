@@ -73,7 +73,7 @@ def read_cc_list(path: Path) -> dict | None:
 
 def fetch_minn(
     path: Path,
-    type: str = Literal["mtx", "adata"],
+    type: Literal["mtx", "adata"],
     stage: str = "qc",
 ):
     s3 = s3fs.S3FileSystem()

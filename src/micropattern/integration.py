@@ -1,13 +1,16 @@
 from anndata import AnnData
 import scvi
+import scanpy as sc
 from datetime import datetime
 import tarfile
+from typing import Literal
 import tempfile
 from pathlib import Path
 import s3fs
 from fsspec.callbacks import TqdmCallback
+import itertools
 
-__all__ = ["integration", "reference_query_mapping"]
+__all__ = ["integration", "reference_query_mapping", "integration_multi"]
 
 
 def _upload_model_to_s3(
@@ -42,10 +45,15 @@ def integration(
     layer: str = "counts",
     categorical_covariates_keys: list | None = None,
     continuous_covariates_keys: list | None = None,
-    lr: float = 1e-3,
+    lr: float = 1e-5,
     n_latent: int = 30,
     n_hidden: int = 128,
     n_layers: int = 2,
+    dropout: float = 0.1,
+    likelihood: Literal["nb", "zinb"] = "nb",
+    compute_umap: bool = False,
+    n_neighbors: int = 15,
+    umap_min_dist: float = 0.01,
 ):
     scvi.model.SCVI.setup_anndata(
         adata,
@@ -60,9 +68,10 @@ def integration(
         n_latent=n_latent,
         n_hidden=n_hidden,
         n_layers=n_layers,
-        gene_likelihood="nb",
+        gene_likelihood=likelihood,
         deeply_inject_covariates=False,
         use_batch_norm="both",
+        dropout_rate=dropout,
     )
     model.train(
         max_epochs=400,
@@ -81,6 +90,12 @@ def integration(
     adata.obsm["X_scvi_qzv"] = qzv
     model.minify_adata(use_latent_qzm_key="X_scvi_qzm", use_latent_qzv_key="X_scvi_qzv")
 
+    if compute_umap:
+        sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X_scvi", random_state=0)
+        sc.tl.umap(adata, min_dist=umap_min_dist)
+        model.adata.obs["umap_x"] = adata.obsm["X_umap"][:, 0]
+        model.adata.obs["umap_y"] = adata.obsm["X_umap"][:, 1]
+
     model_dir = f"{date_str}_SCVI_{run_name}"
     model.save(model_dir, save_anndata=True, overwrite=True)
 
@@ -90,3 +105,81 @@ def integration(
 
 def reference_query_mapping():
     pass
+
+
+def integration_multi(
+    adata: AnnData,
+    base_run_name: str = "integration",
+    batch_key: str = "sample_labels",
+    layer: str = "counts",
+    categorical_covariates_keys: list | None = None,
+    continuous_covariates_keys: list | None = None,
+    lr_values: list[float] | None = None,
+    n_latent_values: list[int] | None = None,
+    n_hidden_values: list[int] | None = None,
+    n_layers_values: list[int] | None = None,
+    dropout_values: list[float] | None = None,
+    likelihood_values: list[Literal["nb", "zinb"]] | None = None,
+    compute_umap: bool = True,
+    n_neighbors: int = 15,
+    umap_min_dist: float = 0.01,
+):
+    if lr_values is None:
+        lr_values = [1e-5]
+    if n_latent_values is None:
+        n_latent_values = [30]
+    if n_hidden_values is None:
+        n_hidden_values = [128]
+    if n_layers_values is None:
+        n_layers_values = [2]
+    if dropout_values is None:
+        dropout_values = [0.1]
+    if likelihood_values is None:
+        likelihood_values = ["nb"]
+
+    param_combinations = list(
+        itertools.product(
+            lr_values,
+            n_latent_values,
+            n_hidden_values,
+            n_layers_values,
+            dropout_values,
+            likelihood_values,
+        )
+    )
+
+    print(f"Exploring {len(param_combinations)} parameter combinations")
+
+    for i, (lr, n_latent, n_hidden, n_layers, dropout, likelihood) in enumerate(
+        param_combinations, 1
+    ):
+        run_name = f"{base_run_name}_lr{lr}_lv{n_latent}_hd{n_hidden}_ly{n_layers}_dr{dropout}_{likelihood}"
+        print(f"\n[{i}/{len(param_combinations)}] Running: {run_name}")
+        print(
+            f"  Parameters: lr={lr}, n_latent={n_latent}, n_hidden={n_hidden}, "
+            f"n_layers={n_layers}, dropout={dropout}, likelihood={likelihood}"
+        )
+
+        try:
+            integration(
+                adata=adata,
+                run_name=run_name,
+                batch_key=batch_key,
+                layer=layer,
+                categorical_covariates_keys=categorical_covariates_keys,
+                continuous_covariates_keys=continuous_covariates_keys,
+                lr=lr,
+                n_latent=n_latent,
+                n_hidden=n_hidden,
+                n_layers=n_layers,
+                dropout=dropout,
+                likelihood=likelihood,
+                compute_umap=compute_umap,
+                n_neighbors=n_neighbors,
+                umap_min_dist=umap_min_dist,
+            )
+            print(f"  ✓ Completed: {run_name}")
+        except Exception as e:
+            print(f"  ✗ Failed: {run_name} - {str(e)}")
+
+    print(f"\nCompleted all {len(param_combinations)} combinations")

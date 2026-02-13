@@ -22,6 +22,6 @@ dependencies = [
   "loguru>=0.7.3",
   "s3fs>=2026.2",
   "scanpy>=1.12",
-  "scprep>=1.1.0",
+  "scprep>=1.1",
   "scvi-tools>=1.4.1",
 ]
