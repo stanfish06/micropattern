@@ -1,31 +1,46 @@
 #!/usr/bin/env python
 
-from pathlib import Path
-import scanpy as sc
+import os
+from datetime import datetime, timezone
+
 import pandas as pd
+import s3fs
+import scanpy as sc
+
 import micropattern as mic
 
-cwd = Path(".").resolve()
-
-mic.io.fetch_minn(cwd, type="adata", stage="qc")
-mic.io.fetch_heemskerk(cwd)
-
-minn_data_path = cwd / "minn_data"
-heemskerk_data_path = cwd / "heemskerk_data"
-
-adata_minn = sc.read_h5ad(minn_data_path / mic.io.MINN_ADATA_LIST["qc"])
-adata_heemskerk = sc.read_h5ad(heemskerk_data_path / mic.io.HEEMSKERK_ADATA["adata"])
-meta_heemskerk = pd.read_csv(
-    heemskerk_data_path / mic.io.HEEMSKERK_ADATA["meta"], index_col=0
+run_tag = os.environ.get(
+    "RUN_TAG", datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 )
+
+S3_MINN = "stan-sequencing-data/processed-active/Minn-micropattern-0-24h"
+S3_HEEMSKERK = "stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d"
+
+s3 = s3fs.S3FileSystem()
+
+print("Loading Minn adata from S3...")
+with s3.open(f"{S3_MINN}/{mic.io.MINN_ADATA_LIST['qc']}", "rb") as f:
+    adata_minn = sc.read_h5ad(f)
+
+print("Loading Heemskerk adata from S3...")
+with s3.open(f"{S3_HEEMSKERK}/{mic.io.HEEMSKERK_ADATA['adata']}", "rb") as f:
+    adata_heemskerk = sc.read_h5ad(f)
+
+print("Loading Heemskerk metadata from S3...")
+with s3.open(f"{S3_HEEMSKERK}/{mic.io.HEEMSKERK_ADATA['meta']}", "rb") as f:
+    meta_heemskerk = pd.read_csv(f, index_col=0)
 adata_heemskerk.obs = meta_heemskerk.loc[adata_heemskerk.obs.index]
+
+print("Loading cell cycle genes from S3...")
+with s3.open(f"{S3_HEEMSKERK}/{mic.io.MISC_DATA['cc_genes']}", "rb") as f:
+    cc = pd.read_csv(f, sep="\t")
+cc = cc.iloc[:, :5].to_dict(orient="list")
+cc_genes = {cat: [g for g in gl if not pd.isna(g)] for cat, gl in cc.items()}
 
 adata_heemskerk.obs["source"] = "heemskerk"
 adata_minn.obs["source"] = "minn"
 adata = sc.concat([adata_heemskerk, adata_minn])
 adata.obs = pd.concat([adata_heemskerk.obs, adata_minn.obs])
-
-cc_genes = mic.io.read_cc_list(cwd)
 
 for n_hvg in range(500, 1001, 100):
     print(f"\n{'=' * 60}")
@@ -47,7 +62,7 @@ for n_hvg in range(500, 1001, 100):
 
     mic.integration.integration_multi(
         adata_copy,
-        base_run_name=f"minn_heemskerk_micropattern_0-10d_{n_hvg}hvg",
+        base_run_name=f"minn_heemskerk_micropattern_0-10d_{n_hvg}hvg_{run_tag}",
         categorical_covariates_keys=None,
         continuous_covariates_keys=cc_genes_all,
         lr_values=[1e-5],
