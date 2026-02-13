@@ -14,7 +14,8 @@ run_tag = os.environ.get(
 )
 
 S3_MINN = "stan-sequencing-data/processed-active/Minn-micropattern-0-24h"
-S3_HEEMSKERK = "stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d"
+S3_HEEMSKERK_D2_D10 = "stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d"
+S3_HEEMSKERK_42H = "stan-sequencing-data/processed-active/Heemskerk-micropattern-42h"
 
 s3 = s3fs.S3FileSystem()
 
@@ -22,25 +23,43 @@ print("Loading Minn adata from S3...")
 with s3.open(f"{S3_MINN}/{mic.io.MINN_ADATA_LIST['qc']}", "rb") as f:
     adata_minn = sc.read_h5ad(f)
 
-print("Loading Heemskerk adata from S3...")
-with s3.open(f"{S3_HEEMSKERK}/{mic.io.HEEMSKERK_ADATA['adata']}", "rb") as f:
-    adata_heemskerk = sc.read_h5ad(f)
+print("Loading Heemskerk D2-D10 adata from S3...")
+with s3.open(f"{S3_HEEMSKERK_D2_D10}/{mic.io.HEEMSKERK_ADATA_D2_D10['adata']}", "rb") as f:
+    adata_heemskerk_d2_d10 = sc.read_h5ad(f)
 
-print("Loading Heemskerk metadata from S3...")
-with s3.open(f"{S3_HEEMSKERK}/{mic.io.HEEMSKERK_ADATA['meta']}", "rb") as f:
-    meta_heemskerk = pd.read_csv(f, index_col=0)
-adata_heemskerk.obs = meta_heemskerk.loc[adata_heemskerk.obs.index]
+print("Loading Heemskerk D2-D10 metadata from S3...")
+with s3.open(f"{S3_HEEMSKERK_D2_D10}/{mic.io.HEEMSKERK_ADATA_D2_D10['meta']}", "rb") as f:
+    meta_heemskerk_d2_d10 = pd.read_csv(f, index_col=0)
+adata_heemskerk_d2_d10.obs = meta_heemskerk_d2_d10.loc[adata_heemskerk_d2_d10.obs.index]
+
+print("Loading Heemskerk 42h reps from S3...")
+adata_heemskerk_42h_list = []
+for s, f in mic.io.HEEMSKERK_ADATA_42H.items():
+    print(f"  Loading {f} ({s})")
+    with s3.open(f"{S3_HEEMSKERK_42H}/{f}", "rb") as fh:
+        adata_tmp = sc.read_h5ad(fh)
+    adata_tmp.obs["sample_labels"] = adata_tmp.obs["sample_labels"].str.cat(
+        ["_42h"] * adata_tmp.shape[0]
+    )
+    adata_heemskerk_42h_list.append(adata_tmp)
+adata_heemskerk_42h = sc.concat(adata_heemskerk_42h_list)
 
 print("Loading cell cycle genes from S3...")
-with s3.open(f"{S3_HEEMSKERK}/{mic.io.MISC_DATA['cc_genes']}", "rb") as f:
+with s3.open(f"{S3_HEEMSKERK_D2_D10}/{mic.io.MISC_DATA['cc_genes']}", "rb") as f:
     cc = pd.read_csv(f, sep="\t")
 cc = cc.iloc[:, :5].to_dict(orient="list")
 cc_genes = {cat: [g for g in gl if not pd.isna(g)] for cat, gl in cc.items()}
 
-adata_heemskerk.obs["source"] = "heemskerk"
+adata_heemskerk_d2_d10.obs["source"] = "heemskerk"
+adata_heemskerk_42h.obs["source"] = "heemskerk"
 adata_minn.obs["source"] = "minn"
-adata = sc.concat([adata_heemskerk, adata_minn])
-adata.obs = pd.concat([adata_heemskerk.obs, adata_minn.obs])
+adata = sc.concat([adata_heemskerk_d2_d10, adata_heemskerk_42h, adata_minn])
+adata.obs = pd.concat([
+    adata_heemskerk_d2_d10.obs,
+    adata_heemskerk_42h.obs,
+    adata_minn.obs,
+])
+print(f"Combined dataset: {adata.shape[0]} cells x {adata.shape[1]} genes")
 
 for n_hvg in range(500, 1001, 100):
     print(f"\n{'=' * 60}")
