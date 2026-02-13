@@ -9,7 +9,7 @@ from datetime import datetime
 
 __all__ = ["fetch_minn", "upload_adata", "upload_minn_adata", "MINN_FILE_LIST"]
 
-MINN_FILE_LIST = [
+MINN_FILE_LIST_0_24H = [
     "GSM5176718_gastruloid_0h_1.barcodes.tsv.gz",
     "GSM5176718_gastruloid_0h_1.genes.tsv.gz",
     "GSM5176718_gastruloid_0h_1.matrix.tsv.gz",
@@ -31,11 +31,25 @@ MINN_FILE_LIST = [
     "GSE169074_gastruloid.all.time.metadata.csv.gz",
 ]
 
+MINN_FILE_LIST_44H = [
+    "GSM4300502_gastruloid1.barcodes.tsv.gz",
+    "GSM4300502_gastruloid1.genes.tsv.gz"
+    "GSM4300502_gastruloid1.matrix.mtx.gz"
+    "GSM4300503_gastruloid2.barcodes.tsv.gz"
+    "GSM4300503_gastruloid2.genes.tsv.gz"
+    "GSM4300503_gastruloid2.matrix.mtx.gz",
+]
+
 MINN_ADATA_LIST = {"qc": "minn_gastruloid_0-24h_qc_20260211.h5ad"}
 
-HEEMSKERK_ADATA = {
+HEEMSKERK_ADATA_D2_D10 = {
     "adata": "adata_timeseries_old_48-96h_new_D6-10_filtered_qc.h5ad",
     "meta": "MP_old_48-96h_new_D6-10_meta.csv",
+}
+
+HEEMSKERK_ADATA_42H = {
+    "rep1": "adata_2020_force_9000.h5ad",
+    "rep2": "adata_2021_BMP_contorl.h5ad",
 }
 
 MISC_DATA = {
@@ -45,10 +59,17 @@ MISC_DATA = {
 
 def fetch_heemskerk(path: Path):
     s3 = s3fs.S3FileSystem()
-    for s, dat in HEEMSKERK_ADATA.items():
+    for s, dat in HEEMSKERK_ADATA_D2_D10.items():
         print(f"Downloading {dat} ({s})")
         s3.get(
             rpath=f"stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d/{dat}",
+            lpath=str(path / "heemskerk_data" / dat),
+            callback=TqdmCallback(),
+        )
+    for s, dat in HEEMSKERK_ADATA_42H.items():
+        print(f"Downloading {dat} ({s})")
+        s3.get(
+            rpath=f"stan-sequencing-data/processed-active/Heemskerk-micropattern-42h/{dat}",
             lpath=str(path / "heemskerk_data" / dat),
             callback=TqdmCallback(),
         )
@@ -79,10 +100,17 @@ def fetch_minn(
     s3 = s3fs.S3FileSystem()
     match type:
         case "mtx":
-            for f in MINN_FILE_LIST:
+            for f in MINN_FILE_LIST_0_24H:
                 print(f"Downloading {f}")
                 s3.get(
                     rpath=f"stan-sequencing-data/processed-active/Minn-micropattern-0-24h/{f}",
+                    lpath=str(path / "minn_data" / f),
+                    callback=TqdmCallback(),
+                )
+            for f in MINN_FILE_LIST_44H:
+                print(f"Downloading {f}")
+                s3.get(
+                    rpath=f"stan-sequencing-data/processed-active/Minn-micropattern-44h/{f}",
                     lpath=str(path / "minn_data" / f),
                     callback=TqdmCallback(),
                 )
