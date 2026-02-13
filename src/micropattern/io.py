@@ -33,10 +33,10 @@ MINN_FILE_LIST_0_24H = [
 
 MINN_FILE_LIST_44H = [
     "GSM4300502_gastruloid1.barcodes.tsv.gz",
-    "GSM4300502_gastruloid1.genes.tsv.gz"
-    "GSM4300502_gastruloid1.matrix.mtx.gz"
-    "GSM4300503_gastruloid2.barcodes.tsv.gz"
-    "GSM4300503_gastruloid2.genes.tsv.gz"
+    "GSM4300502_gastruloid1.genes.tsv.gz",
+    "GSM4300502_gastruloid1.matrix.mtx.gz",
+    "GSM4300503_gastruloid2.barcodes.tsv.gz",
+    "GSM4300503_gastruloid2.genes.tsv.gz",
     "GSM4300503_gastruloid2.matrix.mtx.gz",
 ]
 
