@@ -40,7 +40,7 @@ MINN_FILE_LIST_44H = [
     "GSM4300503_gastruloid2.matrix.mtx.gz",
 ]
 
-MINN_ADATA_LIST = {"qc": "minn_gastruloid_0-24h_qc_20260211.h5ad"}
+MINN_ADATA_LIST = {"qc": "minn_gastruloid_0-24h_qc_20260213.h5ad"}
 
 HEEMSKERK_ADATA_D2_D10 = {
     "adata": "adata_timeseries_old_48-96h_new_D6-10_filtered_qc.h5ad",
