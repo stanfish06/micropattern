@@ -42,6 +42,10 @@ def integration(
     layer: str = "counts",
     categorical_covariates_keys: list | None = None,
     continuous_covariates_keys: list | None = None,
+    lr: float = 1e-3,
+    n_latent: int = 30,
+    n_hidden: int = 128,
+    n_layers: int = 2,
 ):
     scvi.model.SCVI.setup_anndata(
         adata,
@@ -53,9 +57,9 @@ def integration(
     # some parameters i found that work well
     model = scvi.model.SCVI(
         adata,
-        n_latent=45,
-        n_hidden=128,
-        n_layers=2,
+        n_latent=n_latent,
+        n_hidden=n_hidden,
+        n_layers=n_layers,
         gene_likelihood="nb",
         deeply_inject_covariates=False,
         use_batch_norm="both",
@@ -65,7 +69,7 @@ def integration(
         early_stopping=True,
         early_stopping_patience=50,
         check_val_every_n_epoch=1,
-        plan_kwargs={"lr": 1e-3},
+        plan_kwargs={"lr": lr},
     )
 
     date_str = datetime.now().strftime("%Y%m%d")
