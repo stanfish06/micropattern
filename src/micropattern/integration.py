@@ -40,18 +40,20 @@ def integration(
     run_name: str = "integration",
     batch_key: str = "sample_labels",
     layer: str = "counts",
+    categorical_covariates_keys: list | None = None,
     continuous_covariates_keys: list | None = None,
 ):
     scvi.model.SCVI.setup_anndata(
         adata,
         layer=layer,
         batch_key=batch_key,
+        categorical_covariate_keys=categorical_covariates_keys,
         continuous_covariate_keys=continuous_covariates_keys,
     )
     # some parameters i found that work well
     model = scvi.model.SCVI(
         adata,
-        n_latent=30,
+        n_latent=45,
         n_hidden=128,
         n_layers=2,
         gene_likelihood="nb",
