@@ -15,7 +15,9 @@ heemskerk_data_path = cwd / "heemskerk_data"
 
 adata_minn = sc.read_h5ad(minn_data_path / mic.io.MINN_ADATA_LIST["qc"])
 adata_heemskerk = sc.read_h5ad(heemskerk_data_path / mic.io.HEEMSKERK_ADATA["adata"])
-meta_heemskerk = pd.read_csv(heemskerk_data_path / mic.io.HEEMSKERK_ADATA["meta"], index_col=0)
+meta_heemskerk = pd.read_csv(
+    heemskerk_data_path / mic.io.HEEMSKERK_ADATA["meta"], index_col=0
+)
 adata_heemskerk.obs = meta_heemskerk.loc[adata_heemskerk.obs.index]
 
 adata_heemskerk.obs["source"] = "heemskerk"
@@ -26,9 +28,9 @@ adata.obs = pd.concat([adata_heemskerk.obs, adata_minn.obs])
 cc_genes = mic.io.read_cc_list(cwd)
 
 for n_hvg in range(500, 1001, 100):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running with {n_hvg} HVGs")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     adata_copy = adata.copy()
     mic.utils.normalize_and_select_hvg(adata_copy, n_top_genes=n_hvg)
@@ -39,7 +41,9 @@ for n_hvg in range(500, 1001, 100):
         for g in adata_copy.var_names
         if g.split()[0] in cc_genes_all and g not in adata_copy.obs.columns
     ]
-    adata_copy.obs = pd.concat([adata_copy.obs, adata_copy[:, cc_genes_all].to_df()], axis=1)
+    adata_copy.obs = pd.concat(
+        [adata_copy.obs, adata_copy[:, cc_genes_all].to_df()], axis=1
+    )
 
     mic.integration.integration_multi(
         adata_copy,
@@ -48,10 +52,10 @@ for n_hvg in range(500, 1001, 100):
         continuous_covariates_keys=cc_genes_all,
         lr_values=[1e-5],
         n_latent_values=[30, 50, 70],
-        n_hidden_values=[128],
+        n_hidden_values=[128, 256],
         n_layers_values=[2],
-        dropout_values=[0.1],
-        likelihood_values=["nb"],
+        dropout_values=[0.01, 0.1],
+        likelihood_values=["nb", "zinb"],
         compute_umap=True,
         n_neighbors=15,
         umap_min_dist=0.01,
