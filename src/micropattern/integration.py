@@ -9,8 +9,20 @@ from pathlib import Path
 import s3fs
 from fsspec.callbacks import TqdmCallback
 import itertools
+from lightning.pytorch.callbacks import Callback
 
 __all__ = ["integration", "reference_query_mapping", "integration_multi"]
+
+
+class _EpochLogger(Callback):
+    def on_train_epoch_end(self, trainer, pl_module):
+        m = trainer.callback_metrics
+        train = m.get("train_loss_epoch", float("nan"))
+        val = m.get("validation_loss", float("nan"))
+        print(
+            f"  Epoch {trainer.current_epoch}: "
+            f"train_loss={train:.4f}, val_loss={val:.4f}"
+        )
 
 
 def _upload_model_to_s3(
@@ -79,6 +91,8 @@ def integration(
         early_stopping_patience=50,
         check_val_every_n_epoch=1,
         plan_kwargs={"lr": lr},
+        enable_progress_bar=False,
+        callbacks=[_EpochLogger()],
     )
 
     date_str = datetime.now().strftime("%Y%m%d")
@@ -91,7 +105,9 @@ def integration(
     model.minify_adata(use_latent_qzm_key="X_scvi_qzm", use_latent_qzv_key="X_scvi_qzv")
 
     if compute_umap:
-        sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X_scvi", random_state=0)
+        sc.pp.neighbors(
+            adata, n_neighbors=n_neighbors, use_rep="X_scvi", random_state=0
+        )
         sc.tl.umap(adata, min_dist=umap_min_dist)
         model.adata.obs["umap_x"] = adata.obsm["X_umap"][:, 0]
         model.adata.obs["umap_y"] = adata.obsm["X_umap"][:, 1]
