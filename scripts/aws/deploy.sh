@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+USE_SPOT="${1:-ondemand}"  # pass "spot" as first arg to use Spot instances
+
 export AWS_DEFAULT_REGION="us-east-2"
 REGION="${AWS_DEFAULT_REGION}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
@@ -130,18 +132,36 @@ echo "Security Group: ${SG_ID}"
 
 echo "=== Phase D: Compute Environment ==="
 
-if ! aws batch describe-compute-environments --compute-environments "${COMPUTE_ENV}" \
-    --query "computeEnvironments[?status!='DELETED']|[0].computeEnvironmentName" --output text 2>/dev/null | grep -q "${COMPUTE_ENV}"; then
+CE_STATUS=$(aws batch describe-compute-environments --compute-environments "${COMPUTE_ENV}" \
+    --query "computeEnvironments[?status!='DELETED']|[0].status" --output text 2>/dev/null || echo "None")
+if [ "${CE_STATUS}" = "DELETING" ]; then
+    echo "Compute environment is DELETING, waiting..."
+    while [ "$(aws batch describe-compute-environments --compute-environments "${COMPUTE_ENV}" \
+        --query "computeEnvironments[?status=='DELETING']|length(@)" --output text 2>/dev/null)" != "0" ]; do
+        sleep 15
+    done
+    CE_STATUS="None"
+fi
+if [ "${CE_STATUS}" = "None" ] || [ "${CE_STATUS}" = "" ]; then
     echo "Creating compute environment ${COMPUTE_ENV}..."
+    if [ "${USE_SPOT}" = "spot" ]; then
+        COMPUTE_TYPE="SPOT"
+        ALLOC_STRATEGY="SPOT_PRICE_CAPACITY_OPTIMIZED"
+        echo "  Using SPOT instances"
+    else
+        COMPUTE_TYPE="EC2"
+        ALLOC_STRATEGY="BEST_FIT_PROGRESSIVE"
+        echo "  Using ON-DEMAND instances"
+    fi
     aws batch create-compute-environment \
         --compute-environment-name "${COMPUTE_ENV}" \
         --type MANAGED \
         --compute-resources '{
-            "type": "EC2",
-            "allocationStrategy": "BEST_FIT_PROGRESSIVE",
+            "type": "'"${COMPUTE_TYPE}"'",
+            "allocationStrategy": "'"${ALLOC_STRATEGY}"'",
             "minvCpus": 0,
             "maxvCpus": 8,
-            "instanceTypes": ["g4dn.xlarge"],
+            "instanceTypes": ["g4dn.2xlarge"],
             "subnets": '"${SUBNETS}"',
             "securityGroupIds": ["'"${SG_ID}"'"],
             "instanceRole": "arn:aws:iam::'"${ACCOUNT_ID}"':instance-profile/'"${EC2_INSTANCE_ROLE}"'"
@@ -209,7 +229,7 @@ aws batch register-job-definition \
         "image": "'"${IMAGE_URI}"'",
         "resourceRequirements": [
             {"type": "VCPU", "value": "4"},
-            {"type": "MEMORY", "value": "14000"},
+            {"type": "MEMORY", "value": "28000"},
             {"type": "GPU", "value": "1"}
         ],
         "jobRoleArn": "arn:aws:iam::'"${ACCOUNT_ID}"':role/'"${ECS_TASK_ROLE}"'",

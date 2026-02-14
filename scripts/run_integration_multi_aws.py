@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import gc
 import os
 from datetime import datetime, timezone
 
@@ -14,7 +15,9 @@ run_tag = os.environ.get(
 )
 
 S3_MINN = "stan-sequencing-data/processed-active/Minn-micropattern-0-24h"
-S3_HEEMSKERK_D2_D10 = "stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d"
+S3_HEEMSKERK_D2_D10 = (
+    "stan-sequencing-data/processed-active/Heemskerk-micropattern-2-10d"
+)
 S3_HEEMSKERK_42H = "stan-sequencing-data/processed-active/Heemskerk-micropattern-42h"
 
 s3 = s3fs.S3FileSystem()
@@ -24,11 +27,15 @@ with s3.open(f"{S3_MINN}/{mic.io.MINN_ADATA_LIST['qc']}", "rb") as f:
     adata_minn = sc.read_h5ad(f)
 
 print("Loading Heemskerk D2-D10 adata from S3...")
-with s3.open(f"{S3_HEEMSKERK_D2_D10}/{mic.io.HEEMSKERK_ADATA_D2_D10['adata']}", "rb") as f:
+with s3.open(
+    f"{S3_HEEMSKERK_D2_D10}/{mic.io.HEEMSKERK_ADATA_D2_D10['adata']}", "rb"
+) as f:
     adata_heemskerk_d2_d10 = sc.read_h5ad(f)
 
 print("Loading Heemskerk D2-D10 metadata from S3...")
-with s3.open(f"{S3_HEEMSKERK_D2_D10}/{mic.io.HEEMSKERK_ADATA_D2_D10['meta']}", "rb") as f:
+with s3.open(
+    f"{S3_HEEMSKERK_D2_D10}/{mic.io.HEEMSKERK_ADATA_D2_D10['meta']}", "rb"
+) as f:
     meta_heemskerk_d2_d10 = pd.read_csv(f, index_col=0)
 adata_heemskerk_d2_d10.obs = meta_heemskerk_d2_d10.loc[adata_heemskerk_d2_d10.obs.index]
 
@@ -54,14 +61,20 @@ adata_heemskerk_d2_d10.obs["source"] = "heemskerk"
 adata_heemskerk_42h.obs["source"] = "heemskerk"
 adata_minn.obs["source"] = "minn"
 adata = sc.concat([adata_heemskerk_d2_d10, adata_heemskerk_42h, adata_minn])
-adata.obs = pd.concat([
-    adata_heemskerk_d2_d10.obs,
-    adata_heemskerk_42h.obs,
-    adata_minn.obs,
-])
+adata.obs = pd.concat(
+    [
+        adata_heemskerk_d2_d10.obs,
+        adata_heemskerk_42h.obs,
+        adata_minn.obs,
+    ]
+)
 print(f"Combined dataset: {adata.shape[0]} cells x {adata.shape[1]} genes")
 
-for n_hvg in range(500, 1001, 100):
+del adata_minn, adata_heemskerk_d2_d10, meta_heemskerk_d2_d10
+del adata_heemskerk_42h, adata_heemskerk_42h_list
+gc.collect()
+
+for n_hvg in [500, 750, 1000]:
     print(f"\n{'=' * 60}")
     print(f"Running with {n_hvg} HVGs")
     print(f"{'=' * 60}")
@@ -85,10 +98,10 @@ for n_hvg in range(500, 1001, 100):
         categorical_covariates_keys=None,
         continuous_covariates_keys=cc_genes_all,
         lr_values=[1e-5],
-        n_latent_values=[30, 50, 70],
-        n_hidden_values=[128, 256],
+        n_latent_values=[30, 60],
+        n_hidden_values=[128],
         n_layers_values=[2],
-        dropout_values=[0.01, 0.1],
+        dropout_values=[0.1],
         likelihood_values=["nb", "zinb"],
         compute_umap=True,
         n_neighbors=15,
