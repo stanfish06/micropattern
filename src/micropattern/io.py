@@ -7,7 +7,17 @@ from typing import Literal
 import pandas as pd
 from datetime import datetime
 
-__all__ = ["fetch_minn", "upload_adata", "upload_minn_adata", "MINN_FILE_LIST"]
+__all__ = [
+    "fetch_minn",
+    "fetch_minn_heemskerk_adata_hvg",
+    "upload_adata",
+    "upload_minn_adata",
+    "MINN_FILE_LIST_0_24H",
+    "MINN_FILE_LIST_44H",
+    "MINN_ADATA_LIST",
+    "HEEMSKERK_ADATA_D2_D10",
+    "HEEMSKERK_ADATA_42H",
+]
 
 MINN_FILE_LIST_0_24H = [
     "GSM5176718_gastruloid_0h_1.barcodes.tsv.gz",
@@ -53,8 +63,18 @@ HEEMSKERK_ADATA_42H = {
 }
 
 MISC_DATA = {
+    "minn_heemskerk_adata_hvg": "adata_minn_heemskerk_micropattern_0-10d_hvg.h5ad",
     "cc_genes": "Macosko_cell_cycle_genes.txt",
 }
+
+
+def fetch_minn_heemskerk_adata_hvg(path: Path):
+    s3 = s3fs.S3FileSystem()
+    s3.get(
+        rpath=f"stan-sequencing-data/processed-active/Minn-Heemskerk-micropattern/{MISC_DATA['minn_heemskerk_adata_hvg']}",
+        lpath=str(path / "misc_data" / MISC_DATA["minn_heemskerk_adata_hvg"]),
+        callback=TqdmCallback(),
+    )
 
 
 def fetch_heemskerk(path: Path):
