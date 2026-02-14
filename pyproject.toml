@@ -20,6 +20,7 @@ classifiers = [
 dependencies = [
   "jupyterlab>=4.5.4",
   "loguru>=0.7.3",
+  "phate>=2.0.0",
   "s3fs>=2026.2",
   "scanpy>=1.12",
   "scprep>=1.1",
