@@ -9,6 +9,12 @@ run = [
     "uv sync",
 ]
 
+[tasks.sync_dev]
+run = [
+    "uv sync",
+    "uv pip install -e ./ESFS/.[gpu]",
+]
+
 [tasks.format]
 run = [
     "pyproject-fmt pyproject.toml || true",
