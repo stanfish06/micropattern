@@ -1,3 +1,6 @@
 [submodule "ESFS"]
 	path = ESFS
 	url = https://github.com/stanfish06/ESFS.git
+[submodule "forceatlas2"]
+	path = forceatlas2
+	url = https://github.com/stanfish06/forceatlas2
