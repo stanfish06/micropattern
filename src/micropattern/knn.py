@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
+from anndata import AnnData
 from sklearn.neighbors import KNeighborsTransformer
+
+__all__ = ["weighted_knn_trainer", "weighted_knn_transfer", "knn_transfer_layout"]
 
 
 # These function were created by Lisa Sikemma
@@ -144,3 +147,56 @@ def weighted_knn_transfer(
     print("finished!")
 
     return pred_labels, uncertainties
+
+
+def _compute_knn_weights(top_k_distances: np.ndarray) -> np.ndarray:
+    has_exact = np.any(top_k_distances == 0, axis=1)
+    weights = np.zeros_like(top_k_distances)
+
+    if np.any(has_exact):
+        exact_mask = top_k_distances[has_exact] == 0
+        weights[has_exact] = exact_mask / exact_mask.sum(axis=1, keepdims=True)
+
+    if np.any(~has_exact):
+        dists = top_k_distances[~has_exact]
+        stds = np.std(dists, axis=1)
+        safe_stds = np.where(stds > 0, stds, 1.0)
+        scaled = (2.0 / safe_stds) ** 2
+        scaled = scaled.reshape(-1, 1)
+        w = np.exp(-dists / scaled)
+        w_sum = w.sum(axis=1, keepdims=True)
+        w_sum = np.where(w_sum > 0, w_sum, 1.0)
+        weights[~has_exact] = w / w_sum
+
+    return weights
+
+
+def knn_transfer_layout(
+    ref_adata: AnnData,
+    query_adata: AnnData,
+    emb_key: str,
+    *,
+    layout_key: str = "X_fl",
+    n_neighbors: int = 50,
+    key_added: str = "X_fl",
+    knn_model: KNeighborsTransformer | None = None,
+) -> None:
+    ref_layout = ref_adata.obsm[layout_key]
+    assert ref_layout.ndim == 2, f"layout must be 2D array, got shape {ref_layout.shape}"
+    assert n_neighbors <= ref_adata.n_obs, \
+        f"n_neighbors={n_neighbors} exceeds ref_adata size={ref_adata.n_obs}"
+
+    if knn_model is None:
+        knn_model = weighted_knn_trainer(ref_adata, emb_key, n_neighbors=n_neighbors)
+
+    if emb_key == "X":
+        query_emb = query_adata.X
+    else:
+        query_emb = query_adata.obsm[emb_key]
+
+    top_k_distances, top_k_indices = knn_model.kneighbors(X=query_emb)
+    weights = _compute_knn_weights(top_k_distances)
+
+    # weights: (n_query, k), ref_layout[top_k_indices]: (n_query, k, layout_dim)
+    transferred = np.einsum("ij,ijk->ik", weights, ref_layout[top_k_indices])
+    query_adata.obsm[key_added] = transferred

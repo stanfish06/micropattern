@@ -7,6 +7,7 @@ python.uv_venv_auto = true
 [tasks.sync]
 run = [
     "uv sync",
+    "rm -rf ./forceatlas2/fa2/fa2util.cpython-*.so ./forceatlas2/fa2/fa2util.c ./forceatlas2/build/",
     "uv pip install -e ./forceatlas2/"
 ]
 

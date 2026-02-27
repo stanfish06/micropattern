@@ -4,3 +4,6 @@
 [submodule "forceatlas2"]
 	path = forceatlas2
 	url = https://github.com/stanfish06/forceatlas2
+[submodule "visualization-js"]
+	path = visualization-js
+	url = https://github.com/stanfish06/visualization-js
