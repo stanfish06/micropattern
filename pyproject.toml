@@ -18,13 +18,19 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+  "faicons>=0.2.2",
   "jupyterlab>=4.5.4",
   "kaleido>=1.2.0",
   "loguru>=0.7.3",
+  "mpi4py>=4.1.1",
   "phate>=2.0.0",
   "plotly>=6.5.2",
+  "ruamel-yaml>=0.19.1",
   "s3fs>=2026.2",
   "scanpy>=1.12",
   "scprep>=1.1",
   "scvi-tools>=1.4.1",
+  "shiny>=1.5.1",
+  "shinyswatch>=0.9.0",
+  "tables>=3.11.1",
 ]
