@@ -1,19 +1,22 @@
-import s3fs
 import tarfile
-from pathlib import Path
-from fsspec.callbacks import TqdmCallback
-from anndata import AnnData
 import tempfile
-from typing import Literal
-import pandas as pd
 from datetime import datetime
+from pathlib import Path
+from typing import Literal
+
+import pandas as pd
+import s3fs
+from anndata import AnnData
+from fsspec.callbacks import TqdmCallback
 
 __all__ = [
     "fetch_minn",
     "fetch_minn_heemskerk_adata_hvg",
     "fetch_liang_amanda",
+    "fetch_santos",
     "upload_adata",
     "upload_minn_adata",
+    "upload_santos_adata",
     "MINN_FILE_LIST_0_24H",
     "MINN_FILE_LIST_44H",
     "MINN_ADATA_LIST",
@@ -21,6 +24,9 @@ __all__ = [
     "HEEMSKERK_ADATA_42H",
     "LIANG_AMANDA_MESO_DATA_LIST",
     "LIANG_AMANDA_MESO_ADATA",
+    "SANTOS_FILE_LIST",
+    "SANTOS_SAMPLE_LABELS",
+    "SANTOS_ADATA",
     "SCVI_MODELS",
     "fetch_scvi_model",
 ]
@@ -78,6 +84,38 @@ MINN_FILE_LIST_44H = [
 ]
 
 MINN_ADATA_LIST = {"qc": "minn_gastruloid_0-24h_qc_20260213.h5ad"}
+
+SANTOS_FILE_LIST = [
+    "GSM8454481_ING520A1_barcodes.tsv.gz",
+    "GSM8454481_ING520A1_features.tsv.gz",
+    "GSM8454481_ING520A1_matrix.mtx.gz",
+    "GSM8454482_ING520A2_barcodes.tsv.gz",
+    "GSM8454482_ING520A2_features.tsv.gz",
+    "GSM8454482_ING520A2_matrix.mtx.gz",
+    "GSM8454483_ING520A3_barcodes.tsv.gz",
+    "GSM8454483_ING520A3_features.tsv.gz",
+    "GSM8454483_ING520A3_matrix.mtx.gz",
+    "GSM8454484_ING520A4_barcodes.tsv.gz",
+    "GSM8454484_ING520A4_features.tsv.gz",
+    "GSM8454484_ING520A4_matrix.mtx.gz",
+    "GSM8454485_ING520A5_barcodes.tsv.gz",
+    "GSM8454485_ING520A5_features.tsv.gz",
+    "GSM8454485_ING520A5_matrix.mtx.gz",
+    "GSM8454486_ING520A6_barcodes.tsv.gz",
+    "GSM8454486_ING520A6_features.tsv.gz",
+    "GSM8454486_ING520A6_matrix.mtx.gz",
+]
+
+SANTOS_SAMPLE_LABELS = {
+    "GSM8454481_ING520A1": "santos_A100B10toB50_24hrs",
+    "GSM8454482_ING520A2": "santos_B50toA100B10_24hrs",
+    "GSM8454483_ING520A3": "santos_A100B10toB50_48hrs",
+    "GSM8454484_ING520A4": "santos_B50toA100B10_48hrs",
+    "GSM8454485_ING520A5": "santos_A100B10_sustained",
+    "GSM8454486_ING520A6": "santos_B50_sustained",
+}
+
+SANTOS_ADATA = {"qc": "santos_de_meso_convergence_disordered_72h_qc_20260314.h5ad"}
 
 HEEMSKERK_ADATA_D2_D10 = {
     "adata": "adata_timeseries_old_48-96h_new_D6-10_filtered_qc.h5ad",
@@ -225,6 +263,45 @@ def fetch_minn(
                     lpath=str(path / "minn_data" / f),
                     callback=TqdmCallback(),
                 )
+
+
+def fetch_santos(
+    path: Path,
+    type: Literal["mtx", "adata"] = "mtx",
+    stage: str = "qc",
+) -> None:
+    s3 = s3fs.S3FileSystem()
+    base = "stan-sequencing-data/processed-active/Santos-DE-MESO-convergence-disordered"
+    match type:
+        case "mtx":
+            rpaths = [f"{base}/{f}" for f in SANTOS_FILE_LIST]
+            lpaths = [str(path / "santos" / f) for f in SANTOS_FILE_LIST]
+            _batch_download(s3, rpaths, lpaths)
+        case "adata":
+            if stage in SANTOS_ADATA:
+                f = SANTOS_ADATA[stage]
+                print(f"Downloading {f}")
+                s3.get(
+                    rpath=f"{base}/{f}",
+                    lpath=str(path / "santos" / f),
+                    callback=TqdmCallback(),
+                )
+
+
+def upload_santos_adata(
+    adata: AnnData,
+    *,
+    processing_stage: str = "qc",
+    local_path: Path | None = None,
+) -> None:
+    date_str = datetime.now().strftime("%Y%m%d")
+    filename = f"santos_de_meso_convergence_disordered_72h_{processing_stage}_{date_str}.h5ad"
+    upload_adata(
+        adata,
+        s3_path="stan-sequencing-data/processed-active/Santos-DE-MESO-convergence-disordered",
+        local_path=local_path,
+        filename=filename,
+    )
 
 
 def upload_adata(
