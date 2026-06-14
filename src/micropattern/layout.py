@@ -2,7 +2,6 @@ from typing import Literal
 
 import numpy as np
 from anndata import AnnData
-from fa2 import ForceAtlas2
 
 __all__ = ["force_layout"]
 
@@ -54,6 +53,10 @@ def force_layout(
         pos = _random_ball(r=1, n_points=n_points, dim=dim, noise=0, seed=seed)
     else:
         pos = None
+
+    # Imported lazily: fa2 is an optional, locally-vendored Cython package only
+    # needed for force-directed layouts, not for the integration pipeline.
+    from fa2 import ForceAtlas2
 
     fa = ForceAtlas2(verbose=True, scalingRatio=scalingRatio, gravity=gravity, dim=dim)
     adata.obsm[key_added] = np.array(
