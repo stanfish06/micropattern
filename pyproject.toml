@@ -25,7 +25,6 @@ dependencies = [
   "jupyterlab>=4.5.4",
   "kaleido>=1.2.0",
   "loguru>=0.7.3",
-  "mpi4py>=4.1.1",
   "notebook>=7.5.3",
   "phate>=2.0.0",
   "plotly>=6.5.2",
