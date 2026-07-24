@@ -4,12 +4,13 @@ set -euo pipefail
 export AWS_DEFAULT_REGION="us-east-2"
 REGION="${AWS_DEFAULT_REGION}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-ECR_REPO="micropattern"
+ECR_REPO="${ECR_REPO:-micropattern}"
 
-COMPUTE_ENV="micropattern-compute-env"
-JOB_QUEUE="micropattern-job-queue"
-JOB_DEF="micropattern-job-def"
-LOG_GROUP="/aws/batch/micropattern"
+COMPUTE_ENV="${COMPUTE_ENV:-micropattern-compute-env}"
+JOB_QUEUE="${JOB_QUEUE:-micropattern-job-queue}"
+JOB_DEF="${JOB_DEF:-micropattern-job-def}"
+LOG_GROUP="${LOG_GROUP:-/aws/batch/micropattern}"
+DELETE_SHARED_IAM_ROLES="${DELETE_SHARED_IAM_ROLES:-1}"
 
 BATCH_SERVICE_ROLE="micropattern-batch-service-role"
 ECS_EXECUTION_ROLE="micropattern-ecs-execution-role"
@@ -109,9 +110,13 @@ delete_role() {
     aws iam delete-role --role-name "${role_name}"
 }
 
-delete_role "${BATCH_SERVICE_ROLE}"
-delete_role "${ECS_EXECUTION_ROLE}"
-delete_role "${ECS_TASK_ROLE}"
+if [ "${DELETE_SHARED_IAM_ROLES}" = "1" ]; then
+    delete_role "${BATCH_SERVICE_ROLE}"
+    delete_role "${ECS_EXECUTION_ROLE}"
+    delete_role "${ECS_TASK_ROLE}"
+else
+    echo "Skipping shared Batch/ECS IAM roles."
+fi
 echo "Skipping ecsInstanceRole (may be shared with other services)."
 
 echo "=== Step 6: Delete ECR Repository ==="

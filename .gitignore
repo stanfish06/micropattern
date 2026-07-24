@@ -11,3 +11,7 @@ wheels/
 credentials
 
 tmp/
+
+# Staged single-cell data
+heemskerk_data/
+minn_data/

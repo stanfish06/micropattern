@@ -6,15 +6,25 @@ USE_SPOT="${1:-ondemand}"  # pass "spot" as first arg to use Spot instances
 export AWS_DEFAULT_REGION="us-east-2"
 REGION="${AWS_DEFAULT_REGION}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-ECR_REPO="micropattern"
+ECR_REPO="${ECR_REPO:-micropattern}"
 IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO}:latest"
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+DOCKERFILE="${DOCKERFILE:-${PROJECT_ROOT}/scripts/aws/Dockerfile}"
 
 S3_BUCKET="stan-sequencing-data"
-COMPUTE_ENV="micropattern-compute-env"
-JOB_QUEUE="micropattern-job-queue"
-JOB_DEF="micropattern-job-def"
-LOG_GROUP="/aws/batch/micropattern"
+COMPUTE_ENV="${COMPUTE_ENV:-micropattern-compute-env}"
+JOB_QUEUE="${JOB_QUEUE:-micropattern-job-queue}"
+JOB_DEF="${JOB_DEF:-micropattern-job-def}"
+LOG_GROUP="${LOG_GROUP:-/aws/batch/micropattern}"
+JOB_NAME_PREFIX="${JOB_NAME_PREFIX:-micropattern-integration}"
+
+MAX_VCPUS="${MAX_VCPUS:-8}"
+INSTANCE_TYPES_JSON="${INSTANCE_TYPES_JSON:-[\"g4dn.2xlarge\"]}"
+JOB_VCPUS="${JOB_VCPUS:-4}"
+JOB_MEMORY="${JOB_MEMORY:-28000}"
+JOB_GPUS="${JOB_GPUS:-1}"
+JOB_TIMEOUT_SECONDS="${JOB_TIMEOUT_SECONDS:-43200}"
+JOB_CONTAINER_OVERRIDES_JSON="${JOB_CONTAINER_OVERRIDES_JSON:-}"
 
 BATCH_SERVICE_ROLE="micropattern-batch-service-role"
 ECS_EXECUTION_ROLE="micropattern-ecs-execution-role"
@@ -32,14 +42,14 @@ fi
 
 echo "Logging in to ECR..."
 aws ecr get-login-password --region "${REGION}" | \
-    sudo docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+    docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 echo "Building Docker image..."
-sudo docker build -f "${PROJECT_ROOT}/scripts/aws/Dockerfile" -t "${ECR_REPO}" "${PROJECT_ROOT}"
+docker build -f "${DOCKERFILE}" -t "${ECR_REPO}" "${PROJECT_ROOT}"
 
 echo "Tagging and pushing image..."
-sudo docker tag "${ECR_REPO}:latest" "${IMAGE_URI}"
-sudo docker push "${IMAGE_URI}"
+docker tag "${ECR_REPO}:latest" "${IMAGE_URI}"
+docker push "${IMAGE_URI}"
 
 echo "=== Phase B: IAM Roles ==="
 
@@ -160,8 +170,8 @@ if [ "${CE_STATUS}" = "None" ] || [ "${CE_STATUS}" = "" ]; then
             "type": "'"${COMPUTE_TYPE}"'",
             "allocationStrategy": "'"${ALLOC_STRATEGY}"'",
             "minvCpus": 0,
-            "maxvCpus": 8,
-            "instanceTypes": ["g4dn.2xlarge"],
+            "maxvCpus": '"${MAX_VCPUS}"',
+            "instanceTypes": '"${INSTANCE_TYPES_JSON}"',
             "subnets": '"${SUBNETS}"',
             "securityGroupIds": ["'"${SG_ID}"'"],
             "instanceRole": "arn:aws:iam::'"${ACCOUNT_ID}"':instance-profile/'"${EC2_INSTANCE_ROLE}"'"
@@ -228,9 +238,9 @@ aws batch register-job-definition \
     --container-properties '{
         "image": "'"${IMAGE_URI}"'",
         "resourceRequirements": [
-            {"type": "VCPU", "value": "4"},
-            {"type": "MEMORY", "value": "28000"},
-            {"type": "GPU", "value": "1"}
+            {"type": "VCPU", "value": "'"${JOB_VCPUS}"'"},
+            {"type": "MEMORY", "value": "'"${JOB_MEMORY}"'"},
+            {"type": "GPU", "value": "'"${JOB_GPUS}"'"}
         ],
         "jobRoleArn": "arn:aws:iam::'"${ACCOUNT_ID}"':role/'"${ECS_TASK_ROLE}"'",
         "executionRoleArn": "arn:aws:iam::'"${ACCOUNT_ID}"':role/'"${ECS_EXECUTION_ROLE}"'",
@@ -243,16 +253,20 @@ aws batch register-job-definition \
             }
         }
     }' \
-    --timeout '{"attemptDurationSeconds": 43200}'
+    --timeout '{"attemptDurationSeconds": '"${JOB_TIMEOUT_SECONDS}"'}'
 
 echo "=== Phase G: Submit Job ==="
 
-JOB_NAME="micropattern-integration-$(date +%Y%m%d-%H%M%S)"
-JOB_ID=$(aws batch submit-job \
-    --job-name "${JOB_NAME}" \
-    --job-queue "${JOB_QUEUE}" \
-    --job-definition "${JOB_DEF}" \
-    --query "jobId" --output text)
+JOB_NAME="${JOB_NAME_PREFIX}-$(date +%Y%m%d-%H%M%S)"
+SUBMIT_ARGS=(
+    --job-name "${JOB_NAME}"
+    --job-queue "${JOB_QUEUE}"
+    --job-definition "${JOB_DEF}"
+)
+if [ -n "${JOB_CONTAINER_OVERRIDES_JSON}" ]; then
+    SUBMIT_ARGS+=(--container-overrides "${JOB_CONTAINER_OVERRIDES_JSON}")
+fi
+JOB_ID=$(aws batch submit-job "${SUBMIT_ARGS[@]}" --query "jobId" --output text)
 
 echo ""
 echo "========================================="
