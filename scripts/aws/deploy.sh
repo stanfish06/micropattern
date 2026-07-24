@@ -253,6 +253,7 @@ aws batch register-job-definition \
             }
         }
     }' \
+    --retry-strategy '{"attempts":3,"evaluateOnExit":[{"onStatusReason":"Host EC2*","action":"RETRY"},{"onReason":"*","action":"EXIT"}]}' \
     --timeout '{"attemptDurationSeconds": '"${JOB_TIMEOUT_SECONDS}"'}'
 
 echo "=== Phase G: Submit Job ==="
