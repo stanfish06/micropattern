@@ -8,6 +8,7 @@ import gc
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 
 import anndata as ad
@@ -34,6 +35,7 @@ IMPUTE_OUTPUT_CHUNK_SIZE = int(
 )
 MAX_EPOCHS = int(os.environ.get("MULTIVI_MAX_EPOCHS", "500"))
 TRAIN_BATCH_SIZE = int(os.environ.get("MULTIVI_BATCH_SIZE", "256"))
+N_LATENT = int(os.environ.get("MULTIVI_N_LATENT", "30"))
 
 if not HVG_VALUES or any(value <= 0 for value in HVG_VALUES):
     raise ValueError(
@@ -43,6 +45,8 @@ if len(HVG_VALUES) != len(set(HVG_VALUES)):
     raise ValueError("MULTIVI_HVG_VALUES contains duplicate tiers.")
 if not 0 < ATAC_IMPUTE_THRESHOLD <= 1:
     raise ValueError("MULTIVI_ATAC_THRESHOLD must be in (0, 1].")
+if N_LATENT <= 0:
+    raise ValueError("MULTIVI_N_LATENT must be a positive integer.")
 
 INPUT_S3 = os.environ.get("MULTIVI_INPUT_S3")
 if not INPUT_S3:
@@ -64,6 +68,8 @@ def run_name(n_hvg: int, include_minn: bool) -> str:
     name = f"multivi_heemskerk_48_96h_42h_{n_hvg}hvg"
     if include_minn:
         name += "_minn_0_24h"
+    if N_LATENT != 30:
+        name += f"_nlatent{N_LATENT}"
     return name
 
 
@@ -79,20 +85,35 @@ def stage_input(fs: s3fs.S3FileSystem) -> None:
         raise IOError(f"Incomplete download: {INPUT_LOCAL}")
 
 
-def upload_outputs(
-    fs: s3fs.S3FileSystem, output_local: Path, current_run_name: str
+def stream_file(
+    fs: s3fs.S3FileSystem,
+    output_local: Path,
+    local: Path,
+    current_run_name: str,
 ) -> None:
-    if not output_local.exists():
-        raise FileNotFoundError(
-            f"MultiVI output directory was not created: {output_local}"
-        )
-    for local in output_local.rglob("*"):
+    """Upload one artifact to S3 and delete it locally to keep disk flat."""
+    relative = local.relative_to(output_local).as_posix()
+    remote = f"{OUTPUT_S3}/{current_run_name}/{relative}"
+    print(f"Uploading {relative} -> s3://{remote}", flush=True)
+    fs.put_file(str(local), remote)
+    local.unlink()
+
+
+def stream_dir(
+    fs: s3fs.S3FileSystem,
+    output_local: Path,
+    local_dir: Path,
+    current_run_name: str,
+) -> None:
+    """Upload every file under a directory to S3, then remove the directory."""
+    for local in sorted(local_dir.rglob("*")):
         if not local.is_file():
             continue
         relative = local.relative_to(output_local).as_posix()
         remote = f"{OUTPUT_S3}/{current_run_name}/{relative}"
-        print(f"Uploading {local} -> s3://{remote}", flush=True)
+        print(f"Uploading {relative} -> s3://{remote}", flush=True)
         fs.put_file(str(local), remote)
+    shutil.rmtree(local_dir, ignore_errors=True)
 
 
 def prepare_hvg_tier(
@@ -182,9 +203,11 @@ def prepare_hvg_tier(
 
 
 def train_tier(
+    fs: s3fs.S3FileSystem,
     prepared: md.MuData,
     n_hvg: int,
     output_local: Path,
+    current_run_name: str,
 ) -> None:
     mdata, cc_covariate_keys, feature_selection = prepare_hvg_tier(
         prepared, n_hvg
@@ -208,7 +231,7 @@ def train_tier(
         n_genes=mdata.mod["rna"].n_vars,
         n_regions=mdata.mod["atac"].n_vars,
         n_hidden=128,
-        n_latent=30,
+        n_latent=N_LATENT,
         n_layers_encoder=2,
         n_layers_decoder=2,
         gene_likelihood="nb",
@@ -223,12 +246,17 @@ def train_tier(
         check_val_every_n_epoch=5,
     )
 
+    # Each artifact is streamed to S3 and deleted locally as soon as it is
+    # written, so peak disk stays near a single file (the EC2 root volume is
+    # small and accumulating the full run overflows it).
     output_local.mkdir(parents=True, exist_ok=True)
+
     model.save(output_local / "model", overwrite=True)
-    feature_selection.to_csv(
-        output_local / "rna_feature_selection.csv.gz",
-        compression="gzip",
-    )
+    stream_dir(fs, output_local, output_local / "model", current_run_name)
+
+    feature_path = output_local / "rna_feature_selection.csv.gz"
+    feature_selection.to_csv(feature_path, compression="gzip")
+    stream_file(fs, output_local, feature_path, current_run_name)
 
     preparation = dict(prepared.uns.get("preparation", {}))
     run_config = {
@@ -238,6 +266,7 @@ def train_tier(
         "n_cells": mdata.n_obs,
         "n_genes": mdata.mod["rna"].n_vars,
         "n_regions": mdata.mod["atac"].n_vars,
+        "n_latent": N_LATENT,
         "n_hvg": n_hvg,
         "hvg_selection_source": preparation.get(
             "hvg_selection_source", "heemskerk_48_96h"
@@ -252,9 +281,9 @@ def train_tier(
         "batch_size": TRAIN_BATCH_SIZE,
         "include_minn": bool(preparation.get("include_minn", False)),
     }
-    (output_local / "run_config.json").write_text(
-        json.dumps(run_config, indent=2)
-    )
+    config_path = output_local / "run_config.json"
+    config_path.write_text(json.dumps(run_config, indent=2))
+    stream_file(fs, output_local, config_path, current_run_name)
 
     latent = model.get_latent_representation()
     mdata.obsm["X_multivi"] = latent
@@ -263,21 +292,24 @@ def train_tier(
     sc.pp.neighbors(latent_adata, use_rep="X_multivi", n_neighbors=15)
     sc.tl.umap(latent_adata, min_dist=0.2)
     mdata.obsm["X_umap"] = latent_adata.obsm["X_umap"]
+    meta_path = output_local / "cell_metadata_latent_umap.csv.gz"
     latent_adata.obs.assign(
         multivi_1=latent[:, 0],
         multivi_2=latent[:, 1],
         umap_1=latent_adata.obsm["X_umap"][:, 0],
         umap_2=latent_adata.obsm["X_umap"][:, 1],
-    ).to_csv(
-        output_local / "cell_metadata_latent_umap.csv.gz",
-        compression="gzip",
-    )
+    ).to_csv(meta_path, compression="gzip")
+    stream_file(fs, output_local, meta_path, current_run_name)
 
     for metric, history in model.history.items():
         safe_metric = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(metric))
-        history.to_csv(output_local / f"history_{safe_metric}.csv")
+        history_path = output_local / f"history_{safe_metric}.csv"
+        history.to_csv(history_path)
+        stream_file(fs, output_local, history_path, current_run_name)
 
-    mdata.write_h5mu(output_local / "integrated_multivi.h5mu")
+    integrated_path = output_local / "integrated_multivi.h5mu"
+    mdata.write_h5mu(integrated_path)
+    stream_file(fs, output_local, integrated_path, current_run_name)
 
     imputed_dir = output_local / "imputed_atac_heemskerk"
     imputed_dir.mkdir(exist_ok=True)
@@ -315,7 +347,9 @@ def train_tier(
                 "values"
             ] = "MultiVI accessibility probabilities below threshold set to zero"
             name = f"{dataset}_{int(timepoint)}h_part{part:03d}.h5ad"
-            imputed.write_h5ad(imputed_dir / name, compression="gzip")
+            chunk_path = imputed_dir / name
+            imputed.write_h5ad(chunk_path, compression="gzip")
+            stream_file(fs, output_local, chunk_path, current_run_name)
         peak_means.append(
             pd.Series(
                 group_sum / len(group_indices),
@@ -324,11 +358,15 @@ def train_tier(
             )
         )
 
-    pd.concat(peak_means, axis=1).to_csv(
+    peak_path = (
         output_local
-        / "heemskerk_mean_imputed_accessibility_by_timepoint.csv.gz",
-        compression="gzip",
+        / "heemskerk_mean_imputed_accessibility_by_timepoint.csv.gz"
     )
+    pd.concat(peak_means, axis=1).to_csv(peak_path, compression="gzip")
+    stream_file(fs, output_local, peak_path, current_run_name)
+
+    # Everything is on S3 now; drop the (now-empty) local run tree.
+    shutil.rmtree(output_local, ignore_errors=True)
 
 
 def main() -> None:
@@ -346,6 +384,9 @@ def main() -> None:
         raise ValueError(
             f"Expected prepared RNA and ATAC modalities; found {list(prepared.mod)}"
         )
+    # The MuData is fully in memory now; free the staged input (several GB) so
+    # the small EC2 root volume has room for the streamed per-tier outputs.
+    INPUT_LOCAL.unlink(missing_ok=True)
     preparation = dict(prepared.uns.get("preparation", {}))
     include_minn = bool(preparation.get("include_minn", False))
 
@@ -356,8 +397,7 @@ def main() -> None:
             ROOT / "data/GSE245998/processed" / current_run_name
         )
         print(f"Starting {current_run_name}", flush=True)
-        train_tier(prepared, n_hvg, output_local)
-        upload_outputs(fs, output_local, current_run_name)
+        train_tier(fs, prepared, n_hvg, output_local, current_run_name)
         print(f"Completed {current_run_name}", flush=True)
         gc.collect()
         if torch.cuda.is_available():
